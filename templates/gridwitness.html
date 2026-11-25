@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GridWitness · 点阵校图台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='gridwitness.css') }}">
+  <script defer src="{{ url_for('static', filename='gridwitness.js') }}"></script>
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="/"><i aria-hidden="true"></i> GridWitness</a>
+  <span class="mast-label">点阵校图台</span>
+  <a class="external" href="/prepare">照片准备 ↗</a>
+</header>
+<main>
+  <section class="introduction">
+    <div><h1>摄影标板点阵复查</h1><p>在实拍点阵照片上比较名义位置和实测原片暗点中心。</p></div>
+    <div class="top-actions">
+      <button id="practice" class="primary" type="button">打开练习标板</button>
+      <button id="open-import" type="button">导入原片</button>
+    </div>
+  </section>
+  <p id="notice" class="notice" role="status" hidden></p>
+  <section class="library">
+    <label for="library">标板卡</label>
+    <select id="library"><option value="">选取已存卡片</option></select>
+    <span id="origin"></span>
+  </section>
+  <section id="empty" class="empty">
+    <div class="grid-icon" aria-hidden="true"><i></i></div>
+    <h2>选择一张标板原照</h2>
+    <p>设置原照名义首点和间距，再复查每个暗点的真实来源。</p>
+  </section>
+  <section id="workspace" class="workspace" hidden>
+    <div class="left">
+      <section class="panel source">
+        <div class="panel-head">
+          <div><h2 id="card-title">原片</h2><span id="dimensions"></span></div>
+          <div class="modes" role="group" aria-label="原照取样">
+            <button id="probe-mode" data-mode="probe" aria-pressed="true" type="button">点读</button>
+            <button id="center-mode" data-mode="center" aria-pressed="false" type="button">取首点</button>
+            <button id="mark-mode" data-mode="mark" aria-pressed="false" type="button">选行</button>
+          </div>
+        </div>
+        <div class="camera"><canvas id="capture" aria-label="标板原照，可点击取样或输入原片像素坐标"></canvas></div>
+        <div class="probe">
+          <b>原片点读</b>
+          <form id="probe-form"><label>X <input id="probe-x" type="number" min="0" step="1" required></label>
+            <label>Y <input id="probe-y" type="number" min="0" step="1" required></label>
+            <button type="submit">读取</button></form>
+          <span id="probe-result">选择原片像素</span>
+        </div>
+      </section>
+      <section class="panel profile">
+        <div class="panel-head">
+          <div><h2 id="chart-title">所选行实测位移</h2><span id="chart-caption">当前截线 · X/Y 位移 · 名义列</span></div>
+          <div class="modes" role="group" aria-label="当前图表">
+            <button data-chart="profile" aria-pressed="true" type="button">当前行位移</button>
+            <button data-chart="coverage" aria-pressed="false" type="button">各行支持</button>
+          </div>
+        </div>
+        <canvas id="chart" width="850" height="166" aria-label="当前点列和全板支持度"></canvas>
+      </section>
+    </div>
+    <aside class="right">
+      <section class="panel readout">
+        <div class="panel-head"><h2>当前行均方根偏移</h2><span id="measurement-state"></span></div>
+        <div class="offset"><strong id="offset-value">—</strong><span id="offset-unit"></span></div>
+        <p id="selected-level"></p><p id="area-level"></p>
+        <div class="inspect-grid"><label>核格列 <input id="inspect-column" type="number" min="1" max="24" value="1" step="1"></label>
+        <div id="cell-readout" role="status"></div></div>
+      </section>
+      <form id="calibration" class="panel settings">
+        <div class="panel-head"><div><h2>名义网格与暗点</h2><span>使用原片像素，X 向右，Y 向下</span></div></div>
+        <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
+        <fieldset><legend>原片名义格网</legend><div class="form-grid">
+          <label>首点 X<input data-setting="origin_x" type="number" step="1" min="0" required></label>
+          <label>首点 Y<input data-setting="origin_y" type="number" step="1" min="0" required></label>
+          <label>当前行<input data-setting="focus" type="number" step="1" min="1" max="24" required></label>
+          <label>水平间距<input data-setting="step_x" type="number" step="1" min="2" required></label>
+          <label>垂直间距<input data-setting="step_y" type="number" step="1" min="2" required></label>
+          <label>行数<input data-setting="rows" type="number" step="1" min="1" max="24" required></label>
+          <label>列数<input data-setting="columns" type="number" step="1" min="1" max="24" required></label>
+        </div></fieldset>
+        <fieldset><legend>实际寻点</legend><div class="form-grid">
+          <label>寻点半宽<input data-setting="radius" type="number" step="1" min="1" max="40" required></label>
+          <label>暗点亮度上限<input data-setting="cutoff" type="number" step="1" min="1" max="254" required></label>
+        </div></fieldset>
+        <button id="save" class="primary" type="submit">保存并测量</button>
+      </form>
+      <section class="panel outputs">
+        <div class="panel-head"><h2>图像交接</h2></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 标板卡 ↓</a></div>
+        <button id="prepare" type="button">将原片送入照片准备 ↗</button>
+      </section>
+    </aside>
+  </section>
+</main>
+<dialog id="import">
+  <form id="upload">
+    <h2>导入标板原照</h2>
+    <label>标板卡名称<input name="name" maxlength="80" required></label>
+    <label>照片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff" required></label>
+    <p id="import-notice" role="status"></p>
+    <div class="top-actions"><button id="cancel-import" type="button">取消</button><button class="primary" type="submit">建立标板卡</button></div>
+  </form>
+</dialog>
+</body>
+</html>
