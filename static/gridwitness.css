@@ -93,3 +93,7 @@ dialog .top-actions { justify-content: end; }
 
 .inspect-grid { display:grid; gap:8px; margin:0 15px 13px; color:var(--muted); font-size:12px; }
 .inspect-grid input { width:50px; margin-left:5px; min-height:26px; }
+.field-hint { margin: 2px 15px 12px; font-size: 11px; line-height: 1.55; color: var(--muted); }
+#line-level { font-size: 12px; line-height: 1.6; word-break: break-all; }
+#line-level.line-ok { color: #8a7420; }
+#line-level.line-miss { color: #a06a4a; }

@@ -57,6 +57,7 @@
           <div><h2 id="chart-title">所选行实测位移</h2><span id="chart-caption">当前截线 · X/Y 位移 · 名义列</span></div>
           <div class="modes" role="group" aria-label="当前图表">
             <button data-chart="profile" aria-pressed="true" type="button">当前行位移</button>
+            <button data-chart="line" aria-pressed="false" type="button">参考线偏离</button>
             <button data-chart="coverage" aria-pressed="false" type="button">各行支持</button>
           </div>
         </div>
@@ -67,7 +68,7 @@
       <section class="panel readout">
         <div class="panel-head"><h2>当前行均方根偏移</h2><span id="measurement-state"></span></div>
         <div class="offset"><strong id="offset-value">—</strong><span id="offset-unit"></span></div>
-        <p id="selected-level"></p><p id="area-level"></p>
+        <p id="selected-level"></p><p id="area-level"></p><p id="line-level"></p>
         <div class="inspect-grid"><label>核格列 <input id="inspect-column" type="number" min="1" max="24" value="1" step="1"></label>
         <div id="cell-readout" role="status"></div></div>
       </section>
@@ -87,6 +88,11 @@
           <label>寻点半宽<input data-setting="radius" type="number" step="1" min="1" max="40" required></label>
           <label>暗点亮度上限<input data-setting="cutoff" type="number" step="1" min="1" max="254" required></label>
         </div></fieldset>
+        <fieldset><legend>当前行参考直线（端点必须有实测质心）</legend><div class="form-grid">
+          <label class="wide">左端候选列（逗号分隔，当前行左侧）<input data-setting="line_left" inputmode="numeric" placeholder="例如 1, 2, 3"></label>
+          <label class="wide">右端候选列（逗号分隔，当前行右侧）<input data-setting="line_right" inputmode="numeric" placeholder="例如 7, 8, 9"></label>
+          <label>横向角度限值°<input data-setting="line_angle" type="number" step="0.1" min="0" max="45" required></label>
+        </div><p class="field-hint">自动枚举候选连线：两端为实测质心、端点之间至少 4 个实测格可核、倾角不超限；在更接近水平与覆盖更多真实格之间取排名和，缺证格不补。偏离按线从左往右看，线下为正、线上为负。</p></fieldset>
         <button id="save" class="primary" type="submit">保存并测量</button>
       </form>
       <section class="panel outputs">

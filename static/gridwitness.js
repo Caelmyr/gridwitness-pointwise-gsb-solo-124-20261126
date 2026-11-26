@@ -3,6 +3,28 @@
 const get = (id) => document.getElementById(id);
 const state = {card: null, result: null, photo: null, probe: null, mode: "probe", chart: "profile", busy: false};
 const settings = [...document.querySelectorAll("[data-setting]")];
+const listFields = new Set(["line_left", "line_right"]);
+
+function parseColumns(text) {
+  const columns = [];
+  for (const piece of String(text).split(/[，,\s]+/)) {
+    if (!piece) continue;
+    const column = Number(piece);
+    if (!Number.isInteger(column) || column < 1) throw new Error("候选列必须是逗号分隔的正整数列号。");
+    if (!columns.includes(column)) columns.push(column);
+  }
+  return columns.sort((a, b) => a - b);
+}
+
+function settingValue(field) {
+  const name = field.dataset.setting;
+  if (listFields.has(name)) return parseColumns(field.value);
+  return Number(field.value);
+}
+
+function formatSetting(name, value) {
+  return listFields.has(name) ? (value || []).join(", ") : value;
+}
 
 async function api(path, options) {
   const response = await fetch("/gridwitness" + path, options);
@@ -80,6 +102,27 @@ function paintSource() {
       ctx.stroke();
     }
   }
+  const adopted = result.reference?.adopted;
+  if (adopted) {
+    ctx.strokeStyle = "#f2e46a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(adopted.left_x,adopted.left_y);
+    ctx.lineTo(adopted.right_x,adopted.right_y);
+    ctx.stroke();
+    for (const cell of result.profile) {
+      if (cell.column < adopted.left_column || cell.column > adopted.right_column || !cell.center) continue;
+      const endpoint = cell.column === adopted.left_column || cell.column === adopted.right_column;
+      ctx.beginPath();
+      ctx.arc(cell.center.x,cell.center.y,endpoint ? 9 : 7,0,2*Math.PI);
+      ctx.lineWidth = endpoint ? 2 : 1;
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#f2e46a";
+    ctx.font = "12px monospace";
+    ctx.fillText("L" + adopted.left_column, adopted.left_x, Math.max(12, adopted.left_y - 12));
+    ctx.fillText("R" + adopted.right_column, adopted.right_x, Math.max(12, adopted.right_y - 12));
+  }
   if (probe) {
     ctx.strokeStyle = "#f5dcb8";
     ctx.strokeRect(probe.x-5,probe.y-5,10,10);
@@ -92,14 +135,27 @@ function paintChart() {
   const {width,height} = canvas;
   const {result,card} = state;
   const support = state.chart === "coverage";
+  const lineMode = state.chart === "line";
+  const adopted = result.reference?.adopted;
   const maxX = support ? card.settings.rows : card.settings.columns;
-  const upper = support ? card.settings.columns : Math.max(1,...result.profile.flatMap((cell) =>
-    cell.center ? [Math.abs(cell.dx),Math.abs(cell.dy)] : []));
+  const upper = support
+    ? card.settings.columns
+    : lineMode
+      ? Math.max(1,...result.profile.flatMap((cell) =>
+          cell.line_offset === null || cell.line_offset === undefined ? [] : [Math.abs(cell.line_offset)]))
+      : Math.max(1,...result.profile.flatMap((cell) =>
+          cell.center ? [Math.abs(cell.dx),Math.abs(cell.dy)] : []));
   const lower = support ? 0 : -upper;
   const xAt = (x) => 48 + (width-82) * (x-1) / Math.max(1,maxX-1);
   const yAt = (v) => height-25 - (height-43) * (v-lower) / (upper-lower);
-  get("chart-title").textContent = support ? "各点阵行实测支持" : "所选行实测位移";
-  get("chart-caption").textContent = support ? "实测格点数 · 名义行" : "橙 ΔX · 紫 ΔY · 名义列";
+  get("chart-title").textContent = support ? "各点阵行实测支持"
+    : lineMode ? "参考直线垂直偏离" : "所选行实测位移";
+  get("chart-caption").textContent = support
+    ? "实测格点数 · 名义行"
+    : lineMode
+      ? (adopted ? `L${adopted.left_column}→R${adopted.right_column} 实测质心 · 线下正/线上负 · px`
+                 : "尚无采用的参考直线")
+      : "橙 ΔX · 紫 ΔY · 名义列";
   ctx.fillStyle = "#f3f8fb";
   ctx.fillRect(0,0,width,height);
   ctx.font = "12px monospace";
@@ -121,7 +177,7 @@ function paintChart() {
     ctx.beginPath();
     let prior=false;
     for (const [pos,value] of values) {
-      if (value === null) {
+      if (value === null || value === undefined) {
         prior=false;
         continue;
       }
@@ -133,7 +189,14 @@ function paintChart() {
     ctx.stroke();
   };
   if (support) plot(result.row_counts.map((row) => [row.row,row.valid]),"#4e7e97");
-  else {
+  else if (lineMode) {
+    plot(result.profile.map((cell) => [cell.column,cell.line_offset]),"#b7992f");
+    if (!adopted) {
+      ctx.fillStyle = "#a06a4a";
+      ctx.font = "13px sans-serif";
+      ctx.fillText(result.reference?.reason || "请先在右侧指定候选列并保存测量。", 60, height / 2);
+    }
+  } else {
     plot(result.profile.map((cell) => [cell.column,cell.center ? cell.dx : null]),"#c27a50");
     plot(result.profile.map((cell) => [cell.column,cell.center ? cell.dy : null]),"#7767aa");
   }
@@ -154,9 +217,18 @@ function inspectCell() {
     return;
   }
   const nominal = "名义 (" + cell.nominal_x + ", " + cell.nominal_y + ")";
-  target.textContent = cell.center
+  const centroid = cell.center
     ? nominal + " · 实测 (" + cell.center.x.toFixed(2) + ", " + cell.center.y.toFixed(2) + ") · " + cell.center.support + " 原暗点"
     : nominal + " · 无足够暗点";
+  const adopted = state.result.reference?.adopted;
+  let line = "";
+  if (adopted && cell.line_offset !== null && cell.line_offset !== undefined) {
+    const sign = cell.line_offset > 0 ? "线下 +" : cell.line_offset < 0 ? "线上 −" : "线上 0";
+    line = " · 参考线偏离 " + sign + Math.abs(cell.line_offset).toFixed(3) + " px";
+  } else if (adopted && cell.center) {
+    line = " · 该列在参考线端点列之外，不计偏离";
+  }
+  target.textContent = centroid + line;
 }
 
 function show() {
@@ -167,7 +239,9 @@ function show() {
   get("card-title").textContent = card.name;
   get("dimensions").textContent = card.width + " × " + card.height + " px · " + card.photo_name;
   get("name").value = card.name;
-  for (const field of settings) field.value = card.settings[field.dataset.setting];
+  for (const field of settings) {
+    field.value = formatSetting(field.dataset.setting, card.settings[field.dataset.setting]);
+  }
   get("probe-x").max = card.width - 1;
   get("probe-y").max = card.height - 1;
   get("probe-x").value = state.probe?.x ?? card.settings.origin_x;
@@ -182,6 +256,22 @@ function show() {
     : "该行无实测格点";
   get("area-level").textContent = result.row_counts.reduce((sum, row) => sum + row.valid,0) +
     " / " + (card.settings.rows * card.settings.columns) + " 全板格点有证";
+  const lineLevel = get("line-level");
+  const adoptedLine = result.reference?.adopted;
+  if (adoptedLine) {
+    lineLevel.hidden = false;
+    lineLevel.textContent = "参考直线 第" + adoptedLine.left_column + "列→第" + adoptedLine.right_column +
+      "列原质心 · 倾角 " + adoptedLine.angle.toFixed(3) + "° · 证点 " + adoptedLine.witness_count +
+      " 格（端点内 " + adoptedLine.inside_valid + "）· 偏离 RMS " +
+      adoptedLine.rms_offset.toFixed(3) + " px · 线下为正";
+    lineLevel.classList.add("line-ok");
+    lineLevel.classList.remove("line-miss");
+  } else {
+    lineLevel.hidden = false;
+    lineLevel.textContent = "参考直线未采用：" + (result.reference?.reason || "请指定左右候选列。");
+    lineLevel.classList.add("line-miss");
+    lineLevel.classList.remove("line-ok");
+  }
   get("inspect-column").max = card.settings.columns;
   if (Number(get("inspect-column").value) > card.settings.columns) get("inspect-column").value = 1;
   inspectCell();
@@ -267,7 +357,7 @@ get("calibration").addEventListener("submit", (event) => {
   event.preventDefault();
   action(async () => {
     const fields = Object.fromEntries(settings.map((field) => [
-      field.dataset.setting, Number(field.value),
+      field.dataset.setting, settingValue(field),
     ]));
     const card = await api(route(""), {
       method: "PATCH", headers: {"Content-Type": "application/json"},
